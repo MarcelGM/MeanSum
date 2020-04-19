@@ -6,6 +6,8 @@ SAVED_MODELS_DIR = 'checkpoints/'
 
 OUTPUTS_DIR = 'outputs/'
 OUTPUTS_EVAL_DIR = os.path.join(OUTPUTS_DIR, 'eval/')
+### OUTPUTS_COMPAR_DIR = os.path.join(OUTPUTS_DIR, 'compar/')
+
 
 WORD2VEC_PATH = 'datasets/GoogleNews-vectors-negative300.bin'  # for extractive method
 
@@ -29,8 +31,10 @@ class DatasetConfig(object):
 
             # Paths
             self.dir_path = 'datasets/yelp_dataset/'
+            ######
             self.reviews_path = 'datasets/yelp_dataset/review.json'
             self.businesses_path = 'datasets/yelp_dataset/business.json'
+            ######
             self.processed_path = 'datasets/yelp_dataset/processed/'
             self.subwordenc_path = 'datasets/yelp_dataset/processed/subwordenc_32000_maxrevs260_fixed.pkl'
 
@@ -55,6 +59,8 @@ class DatasetConfig(object):
 
             # Paths
             self.dir_path = 'datasets/amazon_dataset/'
+            ######
+            ######
             self.processed_path = 'datasets/amazon_dataset/processed/'
             self.subwordenc_path = 'datasets/amazon_dataset/processed/subwordenc_32000_secondpass.pkl'
 
@@ -63,7 +69,85 @@ class DatasetConfig(object):
             self.clf_path = 'stable_checkpoints/clf/cnn/amazon/batch_size_256-clf_lr_0.0001/' \
                             'clf_e15_l0.7415_a0.7115_d0.0000.pt'
             self.sum_path = 'stable_checkpoints/sum/mlstm/amazon/batch_size_16-notes_both-sum_lr_0.0005-tau_2.0/' \
-                            'sum_e1_tot4.14_r1f0.26.pt'
+                            'sum_e1_tot4.14_r1f0.26.pt' 
+            self.autoenc_path = None
+            
+        elif name == 'hotel':
+            # Params
+            self.review_max_len = 180
+            self.extractive_max_len = 38  
+            self.item_min_reviews = 20
+            self.item_max_reviews = 260  
+            self.vocab_size = 32000  # target vocab size when building subwordenc
+
+            # Paths
+            self.dir_path = 'datasets/hotel_dataset/'
+            ######
+            self.reviews_path = 'datasets/hotel_dataset/review.json'
+            self.businesses_path = 'datasets/hotel_dataset/business.json'
+            ######
+            self.processed_path = 'datasets/hotel_dataset/processed/'
+            self.subwordenc_path = 'datasets/hotel_dataset/processed/subwordenc_32000_maxrevs260_fixed.pkl'
+
+            # Trained models
+            #self.lm_path = 'stable_checkpoints/lm/mlstm/hotel/batch_size_64-lm_lr_0.001/lm_e49_intermediate.pt'
+            #self.lm_path = 'checkpoints/lm/mlstm/hotel/batch_size_64/lm_e9_2.93.pt'
+            self.lm_path = 'checkpoints/lm/mlstm/hotel/lm_e24_2.88yelp.pt'
+            #self.clf_path = 'checkpoints/clf/cnn/hotel/batch_size_64-clf_lr_0.0005-cnn_n_feat_maps_256/clf_e3_l0.7940_a0.6464_d0.0000.pt'
+            self.clf_path = 'checkpoints/clf/cnn/yelp/batch_size_256-notes_data260_fixed/clf_e10_l0.6760_a0.7092.pt'
+            #self.sum_path = 'checkpoints/sum/train/hotel/batch_size_8/sum_e2_sub1.pt'   #tot=3.317
+            self.sum_path = 'checkpoints/sum/mlstm/yelp/batch_size_16-notes_cycloss_honly-sum_lr_0.0005-tau_2.0/sum_e0_tot3.32_r1f0.27.pt'
+            self.autoenc_path = None
+            
+            
+        elif name == 'hotel_mask':
+            # Params
+            self.review_max_len = 180
+            self.extractive_max_len = 38  # 99.5th percentile of reviews
+            self.item_min_reviews = 20
+            self.item_max_reviews = 260  # 90th percentile
+            self.vocab_size = 32000  # target vocab size when building subwordenc
+
+            # Paths
+            self.dir_path = 'datasets/hotel_mask_dataset/'
+            ######
+            self.reviews_path = 'datasets/hotel_mask_dataset/review.json'
+            self.businesses_path = 'datasets/hotel_mask_dataset/business.json'
+            ######
+            self.processed_path = 'datasets/hotel_mask_dataset/processed/'
+            self.subwordenc_path = 'datasets/hotel_mask_dataset/processed/subwordenc_32000_maxrevs260_fixed.pkl'
+
+            # Trained models
+            #self.lm_path = 'stable_checkpoints/lm/mlstm/hotel/batch_size_64-lm_lr_0.001/lm_e49_intermediate.pt' not working
+            #self.lm_path = 'checkpoints/lm/mlstm/hotel_mask/lm_e9_2.93.pt' not working
+            self.lm_path ='checkpoints/lm/mlstm/hotel_mask/lm_e24_2.88yelp.pt'
+            self.clf_path = 'checkpoints/clf/cnn/hotel_mask/batch_size_64-clf_lr_0.0005-cnn_n_feat_maps_256/clf_e2_l0.8130_a0.6326_d0.0000.pt'
+            self.sum_path = 'checkpoints/sum/train/hotel_mask/batch_size_8-notes_batch_size_8_gpu_0_1/sum_e1_sub2.pt'
+            self.autoenc_path = None
+
+        elif name == 'hotel_mask_sing_asp':
+            # Params
+            self.review_max_len = 180
+            self.extractive_max_len = 38  # 99.5th percentile of reviews
+            self.item_min_reviews = 20
+            self.item_max_reviews = 260  # 90th percentile
+            self.vocab_size = 32000  # target vocab size when building subwordenc
+
+            # Paths
+            self.dir_path = 'datasets/hotel_mask_sing_asp_dataset/'
+            ######
+            self.reviews_path = 'datasets/hotel_mask_sing_asp_dataset/review.json'
+            self.businesses_path = 'datasets/hotel_mask_sing_asp_dataset/business.json'
+            ######
+            self.processed_path = 'datasets/hotel_mask_sing_asp_dataset/processed/'
+            self.subwordenc_path = 'datasets/hotel_mask_sing_asp_dataset/processed/subwordenc_32000_maxrevs260_fixed.pkl'
+
+            # Trained models
+            #self.lm_path = 'stable_checkpoints/lm/mlstm/hotel/batch_size_64-lm_lr_0.001/lm_e49_intermediate.pt' not working
+            #self.lm_path = 'checkpoints/lm/mlstm/hotel_mask/lm_e9_2.93.pt' not working
+            self.lm_path ='checkpoints/lm/mlstm/hotel_mask_sing_asp/lm_e24_2.88yelp.pt'
+            self.clf_path = 'checkpoints/clf/cnn/hotel_mask_sing_asp/batch_size_64-clf_lr_0.0005-cnn_n_feat_maps_256/clf_e2_l0.8130_a0.6326_d0.0000.pt'
+            self.sum_path = 'checkpoints/sum/train/hotel_mask_sing_asp/batch_size_8-notes_./sum_e2_sub1_2.33_r1f0.31.pt'
             self.autoenc_path = None
 
 
@@ -129,7 +213,7 @@ class HParams(object):
         self.discrim_model = 'cnn'
         self.discrim_onehot = True
 
-        self.sum_clf = True  # calculate classification loss and accuracy
+        self.sum_clf = True # calculate classification loss and accuracy
         self.sum_clf_lr = 0.0  # when 0, don't backwards() etc
 
         self.sum_lr = 0.0001
@@ -178,11 +262,11 @@ class HParams(object):
         # TRAINING AND DATA REPRESENTATION
         ###############################################
         self.seed = 1234
-        self.batch_size = 128
+        self.batch_size = 64 #128
         self.n_docs = 8
         self.n_docs_min = -1
         self.n_docs_max = -1
-        self.max_nepochs = 50
+        self.max_nepochs = 25 #50
         self.notes = ''  # notes about run
 
         self.optim = 'normal'  # normal or noam
