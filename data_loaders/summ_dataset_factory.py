@@ -9,7 +9,7 @@ In part here in a separate file to avoid circular imports
 from data_loaders.amazon_dataset import AmazonDataset
 from data_loaders.yelp_dataset import YelpDataset
 from data_loaders.hotel_dataset import HotelDataset
-#from data_loaders.hotel_mask_dataset import Hotel_Mask_Dataset
+from data_loaders.hotel_mask_dataset import Hotel_Mask_Dataset
 #from data_loaders.hotel_mask_sing_asp_dataset import Hotel_Mask_Sing_Asp_Dataset
 
 
