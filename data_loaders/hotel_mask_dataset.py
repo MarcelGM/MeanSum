@@ -226,7 +226,10 @@ class Hotel_Mask_PytorchDataset(Dataset):
         # except Exception as e:
         #     print(e)
         #     pdb.set_trace(
-        return hotel_id, texts, avg_rating, metadata
+        
+        
+        #return hotel_id, texts, avg_rating, metadata
+        return texts, avg_rating, metadata
 
     def __len__(self):
         return self.n

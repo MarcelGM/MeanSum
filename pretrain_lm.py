@@ -90,106 +90,123 @@ class LanguageModel(object):
 
         loss_avg = 0
         n_fwds = 0
-        for s_idx, (texts, ratings, metadata) in enumerate(data_iter):
-            start = time.time()
+        ###########################################
+        try:  
+            for s_idx, (texts, ratings, metadata) in enumerate(data_iter):
+                start = time.time()
 
-            # Add special tokens to texts
-            x, lengths, labels = self.dataset.prepare_batch(texts, ratings,
-                                                            doc_append_id=EDOC_ID)
-            iter = create_lm_data_iter(x, self.hp.lm_seq_len)
-            for b_idx, batch_obj in enumerate(iter):
-                if optimizer:
-                    optimizer.optimizer.zero_grad()
+                # Add special tokens to texts
+                x, lengths, labels = self.dataset.prepare_batch(texts, ratings,
+                                                                doc_append_id=EDOC_ID)
+                iter = create_lm_data_iter(x, self.hp.lm_seq_len)
 
-                #
-                # Forward pass
-                #
-                if self.hp.model_type == 'mlstm':
-                    # Note: iter creates a sequence of length hp.lm_seq_len + 1, and batch_obj.trg is all about the
-                    # last token, while batch_obj.trg_y is all but the first token. They're named as such because
-                    # the Batch class was originally designed for the Encoder-Decoder version of the Transformer, and
-                    # the trg variables correspond to inputs to the Decoder.
-                    batch = move_to_cuda(batch_obj.trg)  # it's trg because doesn't include last token
-                    batch_trg = move_to_cuda(batch_obj.trg_y)
-                    batch_size, seq_len = batch.size()
 
-                    if b_idx == 0:
-                        h_init, c_init = self.model.module.rnn.state0(batch_size) if self.ngpus > 1 \
-                            else self.model.rnn.state0(batch_size)
-                        h_init = move_to_cuda(h_init)
-                        c_init = move_to_cuda(c_init)
+                for b_idx, batch_obj in enumerate(iter):
+                    if optimizer:
+                        optimizer.optimizer.zero_grad()
 
-                    # Forward steps for lstm
-                    result = self.model(batch, h_init, c_init)
-                    hiddens, cells, outputs = zip(*result) if self.ngpus > 1 else result
+                    #
+                    # Forward pass
+                    #
+                    if self.hp.model_type == 'mlstm':
+                        # Note: iter creates a sequence of length hp.lm_seq_len + 1, and batch_obj.trg is all about the
+                        # last token, while batch_obj.trg_y is all but the first token. They're named as such because
+                        # the Batch class was originally designed for the Encoder-Decoder version of the Transformer, and
+                        # the trg variables correspond to inputs to the Decoder.
+                        batch = move_to_cuda(batch_obj.trg)  # it's trg because doesn't include last token
+                        batch_trg = move_to_cuda(batch_obj.trg_y)
+                        batch_size, seq_len = batch.size()
 
-                    # Calculate loss
-                    loss = 0
-                    batch_trg = batch_trg.transpose(0, 1).contiguous()  # [seq_len, batch]
-                    if self.ngpus > 1:
-                        for t in range(len(outputs[0])):
-                            # length ngpus list of outputs at that time step
-                            loss += self.loss_fn([outputs[i][t] for i in range(len(outputs))], batch_trg[t])
-                    else:
-                        for t in range(len(outputs)):
-                            loss += self.loss_fn(outputs[t], batch_trg[t])
-                    loss_value = loss.item() / self.hp.lm_seq_len
+                        if b_idx == 0:
+                            h_init, c_init = self.model.module.rnn.state0(batch_size) if self.ngpus > 1 \
+                                else self.model.rnn.state0(batch_size)
+                            h_init = move_to_cuda(h_init)
+                            c_init = move_to_cuda(c_init)
 
-                    # We only do bptt until lm_seq_len. Copy the hidden states so that we can continue the sequence
-                    if self.ngpus > 1:
-                        h_init = torch.cat([copy_state(hiddens[i][-1]) for i in range(self.ngpus)], dim=0)
-                        c_init = torch.cat([copy_state(cells[i][-1]) for i in range(self.ngpus)], dim=0)
-                    else:
-                        h_init = copy_state(hiddens[-1])
-                        c_init = copy_state(cells[-1])
+                        # Forward steps for lstm
+                        result = self.model(batch, h_init, c_init)
+                        hiddens, cells, outputs = zip(*result) if self.ngpus > 1 else result
 
-                elif self.hp.model_type == 'transformer':
-                    # This is the decoder only version now
-                    logits = self.model(move_to_cuda(batch_obj.trg), move_to_cuda(batch_obj.trg_mask))
-                    # logits: [batch, seq_len, vocab]
-                    loss = self.loss_fn(logits, move_to_cuda(batch_obj.trg_y))
-                    loss /= move_to_cuda(batch_obj.ntokens.float())  # normalize by number of non-pad tokens
-                    loss_value = loss.item()
-                    if self.ngpus > 1:
-                        # With the custom DataParallel, there is no gather() and the loss is calculated per
-                        # minibatch split on each GPU (see DataParallelCriterion's forward() -- the return
-                        # value is divided by the number of GPUs). We simply undo that operation here.
-                        # Also, note that the KLDivLoss in LabelSmoothing is already normalized by both
-                        # batch and seq_len, as we use size_average=False to prevent any normalization followed
-                        # by a manual normalization using the batch.ntokens. This oddity is because
-                        # KLDivLoss does not support ignore_index=PAD_ID as CrossEntropyLoss does.
-                        loss_value *= len(self.opt.gpus.split(','))
+                        # Calculate loss
+                        loss = 0
+                        batch_trg = batch_trg.transpose(0, 1).contiguous()  # [seq_len, batch]
+                        if self.ngpus > 1:
+                            for t in range(len(outputs[0])):
+                                # length ngpus list of outputs at that time step
+                                loss += self.loss_fn([outputs[i][t] for i in range(len(outputs))], batch_trg[t])
+                        else:
+                            for t in range(len(outputs)):
+                                loss += self.loss_fn(outputs[t], batch_trg[t])
+                        loss_value = loss.item() / self.hp.lm_seq_len
 
-                #
-                # Backward pass
-                #
-                gn = -1.0  # dummy for val (norm can't be < 0 anyway)
-                if optimizer:
-                    loss.backward()
-                    gn = calc_grad_norm(self.model)  # not actually using this, just for printing
-                    optimizer.step()
-                loss_avg = update_moving_avg(loss_avg, loss_value, n_fwds + 1)
-                n_fwds += 1
+                        # We only do bptt until lm_seq_len. Copy the hidden states so that we can continue the sequence
+                        if self.ngpus > 1:
+                            h_init = torch.cat([copy_state(hiddens[i][-1]) for i in range(self.ngpus)], dim=0)
+                            c_init = torch.cat([copy_state(cells[i][-1]) for i in range(self.ngpus)], dim=0)
+                        else:
+                            h_init = copy_state(hiddens[-1])
+                            c_init = copy_state(cells[-1])
 
-            # Print
-            print_str = 'Epoch={}, batch={}/{}, split={}, time={:.4f} --- ' \
-                        'loss={:.4f}, loss_avg_so_far={:.4f}, grad_norm={:.4f}'
-            if s_idx % self.opt.print_every_nbatches == 0:
-                print(print_str.format(
-                    epoch, s_idx, nbatches, split, time.time() - start,
-                    loss_value, loss_avg, gn
-                ))
-                if tb_writer:
-                    # Step for tensorboard: global steps in terms of number of reviews
-                    # This accounts for runs with different batch sizes
-                    step = (epoch * nbatches * self.hp.batch_size) + (s_idx * self.hp.batch_size)
-                    tb_writer.add_scalar('stats/loss', loss_value, step)
+                    elif self.hp.model_type == 'transformer':
+                        # This is the decoder only version now
+                        logits = self.model(move_to_cuda(batch_obj.trg), move_to_cuda(batch_obj.trg_mask))
+                        # logits: [batch, seq_len, vocab]
+                        loss = self.loss_fn(logits, move_to_cuda(batch_obj.trg_y))
+                        loss /= move_to_cuda(batch_obj.ntokens.float())  # normalize by number of non-pad tokens
+                        loss_value = loss.item()
+                        if self.ngpus > 1:
+                            # With the custom DataParallel, there is no gather() and the loss is calculated per
+                            # minibatch split on each GPU (see DataParallelCriterion's forward() -- the return
+                            # value is divided by the number of GPUs). We simply undo that operation here.
+                            # Also, note that the KLDivLoss in LabelSmoothing is already normalized by both
+                            # batch and seq_len, as we use size_average=False to prevent any normalization followed
+                            # by a manual normalization using the batch.ntokens. This oddity is because
+                            # KLDivLoss does not support ignore_index=PAD_ID as CrossEntropyLoss does.
+                            loss_value *= len(self.opt.gpus.split(','))
 
-            # Save periodically so we don't have to wait for epoch to finish
-            save_every = nbatches // 10
-            if save_every != 0 and s_idx % save_every == 0:
-                save_model(self.save_dir, self.model, self.optimizer, epoch, self.opt, 'intermediate')
+                    #
+                    # Backward pass
+                    #
+                    gn = -1.0  # dummy for val (norm can't be < 0 anyway)
+                    if optimizer:
+                        loss.backward()
+                        gn = calc_grad_norm(self.model)  # not actually using this, just for printing
+                        optimizer.step()
+                    loss_avg = update_moving_avg(loss_avg, loss_value, n_fwds + 1)
+                    n_fwds += 1
+               
+                # Print
+                print_str = 'Epoch={}, batch={}/{}, split={}, time={:.4f} --- ' \
+                            'loss={:.4f}, loss_avg_so_far={:.4f}, grad_norm={:.4f}'
+                if s_idx % self.opt.print_every_nbatches == 0:
+                    print(print_str.format(
+                        epoch, s_idx, nbatches, split, time.time() - start,
+                        loss_value, loss_avg, gn
+                    ))
+                    if tb_writer:
+                        # Step for tensorboard: global steps in terms of number of reviews
+                        # This accounts for runs with different batch sizes
+                        step = (epoch * nbatches * self.hp.batch_size) + (s_idx * self.hp.batch_size)
+                        tb_writer.add_scalar('stats/loss', loss_value, step)
 
+                # Save periodically so we don't have to wait for epoch to finish
+                save_every = nbatches // 10
+                if save_every != 0 and s_idx % save_every == 0:
+                    save_model(self.save_dir, self.model, self.optimizer, epoch, self.opt, 'intermediate')
+                    
+        ##################################################################
+        except ValueError:
+            print(f'\n\n\ts_idx: {s_idx}')
+            print(f'data_iter {vars(data_iter).keys()}\n\n{vars(data_iter)}')
+            count = 0
+            for kk in data_iter:
+                print(f'\n\n{kk}')
+                if count == 2:
+                    raise ValueError('A very specific bad thing happened.')
+                count +=1 
+            raise ValueError('A very specific bad thing happened.')
+        
+        
         print('Epoch={}, split={}, --- '
               'loss_avg={:.4f}'.format(epoch, split, loss_avg))
 
